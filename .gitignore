@@ -149,7 +149,4 @@ ipython_config.py
 # Remove previous ipynb_checkpoints
 #   git rm -r .ipynb_checkpoints/
 
-# Ignorar o arquivo Dados_Desafio.xlsx
-Dados_Desafio.xlsx
-
 # End of https://mrkandreev.name/snippets/gitignore-generator/#Python,JupyterNotebooks

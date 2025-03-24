@@ -4,11 +4,11 @@ import numpy as np
 # Função para corrigir os valores da coluna "Custo do afastamento"
 def corrigir_custo(valor):
     if pd.isna(valor) or valor == "--":
-        return None  # Substituir valores vazios ou '--' por None (NULL no MySQL)
+        return None 
     try:
-        return float(str(valor).replace(",", "."))  # Substituir vírgula por ponto e converter para float
+        return float(str(valor).replace(",", "."))  
     except ValueError:
-        return None  # Se não for um número válido, definir como None
+        return None  
     
 # Função para preencher o departamento verificando apenas as linhas vizinhas
 def preencher_departamento(df):

@@ -3,7 +3,6 @@ import pandas as pd
 import time
 from app import df
 
-
 st.title('Tabela Geral')
 
 with st.expander('Colunas'):

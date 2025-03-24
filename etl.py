@@ -41,9 +41,9 @@ def corrigir_valores_errados(row):
 
     # Se o valor for 10x maior ou menor que a mediana, corrigimos
     if not np.isnan(mediana_esperada) and (valor > 10 * mediana_esperada or valor < 0.1 * mediana_esperada):
-        return mediana_esperada  # Substitui pelo valor correto
+        return mediana_esperada  
 
-    return valor  # Mantém o valor original
+    return valor 
 
 # Aplicar a correção
 df["custo"] = df.apply(corrigir_valores_errados, axis=1)

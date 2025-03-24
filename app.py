@@ -1,28 +1,22 @@
 import streamlit as st
 import pandas as pd
-import mysql.connector
-import plotly.graph_objects as go
 import plotly.express as px
 
-import os
-import dotenv
-
-# Conectar ao MySQL
-def get_data(query):
-    dotenv.load_dotenv()
-    conn = mysql.connector.connect(
-        host=os.environ['HOST_DB'],
-        user=os.environ['USER_DB'],  
-        password=os.environ['PASSWORD_DB'],  
-        database=os.environ['DATABASE']
-    )
-    df = pd.read_sql(query, conn)
-    conn.close()
-    return df
+# Carregar dados do arquivo CSV
+@st.cache_data
+def get_data():
+    try:
+        df = pd.read_csv('dados_dashboard.csv')
+        # Converter colunas de data se necessário
+        if 'data_atestado' in df.columns:
+            df['data_atestado'] = pd.to_datetime(df['data_atestado'], errors='coerce')
+        return df
+    except FileNotFoundError:
+        st.error("Arquivo 'dados_dashboard.csv' não encontrado.")
+        return pd.DataFrame()
 
 # DASHBOARD
-df = get_data('SELECT * FROM atestados')
-
+df = get_data()
 # print(df)
 
 st.set_page_config(layout='wide')
@@ -45,30 +39,37 @@ with aba1:
 
 with aba2:
 
+    # Métricas de custo
+    custo_total = df['custo'].sum().round(2)
+    custo_gerentes = df[df['departamento'] == 'Gerente']['custo'].sum().round(2)
+    
+    col_metric1, col_metric2 = st.columns(2)
+    with col_metric1:
+        st.metric("Custo Total com Atestados", f"R$ {custo_total:,.2f}")
+    with col_metric2:
+        st.metric("Custo com Gerentes", f"R$ {custo_gerentes:,.2f}")
+
     col1, col2 = st.columns(2)
 
     with col1:
         # Gráfico de gastos por departamento
-        gastos = get_data("SELECT departamento, SUM(custo) AS total_gasto FROM atestados GROUP BY departamento ORDER BY total_gasto DESC")
-
-        gastos_menores = get_data("""
-            SELECT departamento, SUM(custo) AS total_gasto
-            FROM atestados
-            GROUP BY departamento
-            ORDER BY total_gasto ASC
-            LIMIT 10;
-        """)
+        gastos = df.groupby('departamento')['custo'].sum().reset_index()
+        gastos = gastos.rename(columns={'custo': 'total_gasto'})
+        gastos = gastos.sort_values('total_gasto', ascending=False)
+        
+        gastos['total_gasto'] = gastos['total_gasto'].round(2)
+        gastos_menores = gastos.sort_values('total_gasto').head(10)
 
         if not gastos_menores.empty:
             st.plotly_chart(
-            px.bar(
-                gastos.head(10),
-                x='total_gasto',
-                y='departamento',
-                range_x=(0, gastos.max()),
-                text='total_gasto',
-                title='Top 10 Departamentos com Maiores Gastos'
-            ),
+                px.bar(
+                    gastos.head(10),
+                    x='total_gasto',
+                    y='departamento',
+                    range_x=(0, gastos.max()),
+                    text='total_gasto',
+                    title='Top 10 Departamentos com Maiores Gastos'
+                ),
             use_container_width=True
         )
         else:
@@ -103,17 +104,14 @@ with aba2:
         }
         ordem_dias = ["Segunda", "Terça", "Quarta", "Quinta", "Sexta", "Sábado", "Domingo"]
         
-        # Ocorrências por dia da semana, tradução e ordenação
-        ocorrencias = get_data("""
-            SELECT DAYNAME(data_atestado) AS dia_semana, COUNT(*) AS total 
-            FROM atestados 
-            WHERE data_atestado <> '0001-01-01'
-            GROUP BY dia_semana
-        """)
-        
-        ocorrencias["dia_semana"] = ocorrencias["dia_semana"].map(dias_traduzidos)
-        ocorrencias["dia_semana"] = pd.Categorical(ocorrencias["dia_semana"], categories=ordem_dias, ordered=True)
-        ocorrencias = ocorrencias.sort_values("dia_semana")
+        if 'data_atestado' in df.columns:
+            ocorrencias = df[df['data_atestado'].notna()].copy()
+            ocorrencias['dia_semana'] = ocorrencias['data_atestado'].dt.day_name()
+            ocorrencias = ocorrencias.groupby('dia_semana').size().reset_index(name='total')
+            
+            ocorrencias["dia_semana"] = ocorrencias["dia_semana"].map(dias_traduzidos)
+            ocorrencias["dia_semana"] = pd.Categorical(ocorrencias["dia_semana"], categories=ordem_dias, ordered=True)
+            ocorrencias = ocorrencias.sort_values("dia_semana")
 
         st.plotly_chart(
             px.bar(
@@ -128,27 +126,15 @@ with aba2:
             use_container_width=True
         )
 
-        # Consulta SQL para obter os dados de ocorrências acumuladas por mês
-        ocorrencias_mensais = get_data("""
-            WITH ocorrencias_mensais AS (
-                SELECT 
-                    DATE_FORMAT(data_atestado, '%m/%y') AS data,
-                    COUNT(*) AS total_mensal
-                FROM atestados
-                WHERE data_atestado <> '0001-01-01'
-                GROUP BY data
-            )
-            SELECT 
-                o1.data,
-                SUM(o2.total_mensal) AS acumulado
-            FROM ocorrencias_mensais o1
-            JOIN ocorrencias_mensais o2
-                ON o1.data >= o2.data
-            GROUP BY o1.data
-            ORDER BY STR_TO_DATE(o1.data, '%m/%y') ASC;
-        """)
+        if 'data_atestado' in df.columns:
+            ocorrencias_mensais = df[df['data_atestado'].notna()].copy()
+            ocorrencias_mensais['data'] = ocorrencias_mensais['data_atestado'].dt.strftime('%m/%y')
+            ocorrencias_mensais = ocorrencias_mensais.groupby('data').size().reset_index(name='total_mensal')
 
-        # Verifica se há dados antes de exibir o gráfico
+            # Calcular acumulado
+            ocorrencias_mensais = ocorrencias_mensais.sort_values('data')
+            ocorrencias_mensais['acumulado'] = ocorrencias_mensais['total_mensal'].cumsum()
+
         if not ocorrencias_mensais.empty:
             fig = px.bar(
                 ocorrencias_mensais,
@@ -157,11 +143,51 @@ with aba2:
                 text='acumulado',
                 title='Ocorrências Acumuladas por Mês',
                 labels={'data': 'Mês/Ano', 'acumulado': 'Total Acumulado'},
-                color_discrete_sequence=['#007BFF'],  # Azul para destacar os dados
             )
             
             fig.update_xaxes(categoryorder='category ascending')
-            # Exibe o gráfico
             st.plotly_chart(fig, use_container_width=True)
         else:
             st.warning("Nenhum dado encontrado para exibição.")
+
+with aba3:
+    st.write("Visualizações específicas por funcionário")
+    
+    # Gráfico Top 10 funcionários com mais atestados (quantidade)
+    if 'funcionario' in df.columns:
+        atestados_por_funcionario = df['funcionario'].value_counts().reset_index()
+        atestados_por_funcionario.columns = ['funcionario', 'total_atestados']
+            
+        st.plotly_chart(
+            px.bar(
+                atestados_por_funcionario.head(10),
+                x='funcionario',
+                y='total_atestados',
+                text='total_atestados',
+                title='Top 10 - Quantidade de Atestados',
+                labels={'funcionario': 'Funcionário', 'total_atestados': 'N° de Atestados'},
+                color_discrete_sequence=['#636EFA']
+            ).update_traces(textposition='outside'),
+            use_container_width=True
+        )
+    
+    # Gráfico Top 10 funcionários que mais custaram (valor total)
+    if all(col in df.columns for col in ['funcionario', 'custo']):
+        custo_por_funcionario = df.groupby('funcionario')['custo'].sum().reset_index()
+        custo_por_funcionario = custo_por_funcionario.rename(columns={'custo': 'total_gasto'})
+        custo_por_funcionario['total_gasto'] = custo_por_funcionario['total_gasto'].round(2)
+        custo_por_funcionario = custo_por_funcionario.sort_values('total_gasto', ascending=False)
+            
+        st.plotly_chart(
+            px.bar(
+                custo_por_funcionario.head(10),
+                x='funcionario',
+                y='total_gasto',
+                text='total_gasto',
+                title='Top 10 - Maiores Custos com Atestados (R$)',
+                labels={'funcionario': 'Funcionário', 'total_gasto': 'Valor Total'},
+                color_discrete_sequence=['#EF553B'],
+                text_auto='.2f'
+            ).update_traces(textposition='outside'),
+            use_container_width=True
+        )

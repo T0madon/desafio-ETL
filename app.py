@@ -90,8 +90,8 @@ with aba2:
         else:
             st.warning("Nenhum dado encontrado para os menores gastos.")
 
-
     with col2:
+
         dias_traduzidos = {
             "Monday": "Segunda",
             "Tuesday": "Terça",

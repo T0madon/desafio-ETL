@@ -2,6 +2,8 @@ import streamlit as st
 import pandas as pd
 import plotly.express as px
 
+st.set_page_config(layout='wide')
+
 # Carregar dados do arquivo CSV
 @st.cache_data
 def get_data():
@@ -19,7 +21,6 @@ def get_data():
 df = get_data()
 # print(df)
 
-st.set_page_config(layout='wide')
 st.title("Dashboard de Atestados Médicos")
 
 st.sidebar.title('Filtro de Funcionários')

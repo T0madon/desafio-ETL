@@ -74,6 +74,7 @@ pandocfilters
 parso
 pillow
 platformdirs
+plotly
 prometheus_client
 prompt_toolkit
 protobuf
